@@ -1,0 +1,129 @@
+---
+title: "Qualitative Analysis of Weight Lifting Exercises"
+author: "Shobhit Tiwari"
+date: "December 12, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(ggplot2)
+library(GGally)
+library(randomForest)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+Data for this project comes from this website: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Synopsis
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+The goal of this project is to determine whether a person is performing excercise in correct way that is class A or one of the 4 incorrect ways.
+
+
+## Dataextraction and partitioning
+
+```{r}
+dat <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), na.strings = c("NA","#DIV/0!",""))
+set.seed(2130)
+inTrain <- createDataPartition(dat$classe, p = 0.6, list = FALSE)
+training <- dat[inTrain,]
+testing <- dat[-inTrain,]
+testCases <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), na.strings = c("NA","#DIV/0!",""))
+
+```
+
+
+## Datacleanup
+
+Lets check how many NAs are present in training set
+
+```{r}
+naCount <- sum(is.na(training))
+naCount
+```
+
+We can see there are a lot of columns with NA vlaues. 
+Lets remove all columns that are having more than 60% NAs
+
+```{r}
+remCol <- c()
+for (i in 1: length(names(training)))
+{
+  if(sum(is.na(training[,i])) / nrow(training) > 0.6) {
+    remCol <- c(remCol,names(training)[i])
+  }
+}
+cleanTrain <- training[,!(names(training) %in% remCol)]
+```
+
+We will also remove variables with more than 60% NAs from testing and test cases
+
+```{r}
+finalVars <- names(cleanTrain)
+cleanTest <- testing[,(names(testing) %in% finalVars)]
+finalVars2 <- names(cleanTrain[,-60])
+testCases <- testCases[,(names(testCases) %in% finalVars2)]
+```
+
+
+Dropping features that are irrelavant to classe prediciton
+
+```{r}
+cleanTrain <- cleanTrain[,-c(1,2,5)]
+cleanTest <- cleanTest[,-c(1,2,5)]
+testCases <- testCases[,-c(1,2,5)]
+```
+
+
+
+Let us see count of different classes in dataset.
+
+
+```{r}
+table(cleanTrain$classe)
+```
+
+Data seems reasonably spread across classes and is not skewed. 
+
+## Data modelling 
+
+Now we will fit a gbm model 
+
+```{r message=FALSE}
+set.seed(2130)
+train_control<- trainControl(method="cv", number=5)
+gbmFit <- train(classe ~ ., data = cleanTrain, method = "gbm", trControl = train_control, verbose = FALSE)
+```
+
+## Prediction and out of sample accuracy 
+
+```{r}
+predictTest <- predict(gbmFit, newdata = cleanTest)
+confusionMatrix(predictTest, cleanTest$classe)
+postResample(predictTest, cleanTest$classe)
+```
+
+
+**We have out of sample accuracy of 99.55 and out of sample error rate of 0.45 which is quite good.**
+
+
+## Running on test cases and result
+
+Now we will run prediction for test cases and save result in a file for submission 
+
+```{r}
+result  <- predict(gbmFit, newdata = testCases)
+result
+```
+
+
+### Appendix 
+
+```{r}
+plot(gbmFit)
+```
